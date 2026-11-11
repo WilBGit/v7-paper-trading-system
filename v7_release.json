@@ -1,0 +1,103 @@
+{
+  "family_name": "v7-scalp",
+  "engine_version": "7.5.4-near-live-pricing",
+  "strategy_id": "v7504-near-live-pricing",
+  "release_date": "2026-10-12",
+  "previous_engine_version": "7.5.3-confluence-momentum-reentry-guard",
+  "previous_strategy_id": "v7503-confluence-momentum-reentry-guard",
+  "change_type": "near_live_pricing_and_momentum_uniformity",
+  "change_summary": "V7.5.4 tightens executed-price freshness toward live pricing (entry option-quote staleness 60s->15s, exit option-quote staleness 30s->15s, signal bar restricted to the freshest completed 5-minute bar 600s->300s), keeps the quote worker warm through post-exit cooldowns (120s idle grace before cold reset, eliminating the ~2s cold start on re-entry scans), and extends the operator-approved directional-momentum requirement to the normal signal path (confluence already required it in V7.5.3; crash/pump detectors remain exempt). Winner-commonality review of all 121 closed paper trades (49 wins, +$134) found every robust winning discriminator already encoded by existing structure gates plus V7.5.3; further candidates were rejected as overfit and are documented in notes. Live order placement was audited: the bridge places limit orders at the paper-recorded ask, so fills are at-or-better by construction; no bridge change is needed.",
+  "evidence_gate": {
+    "min_closed_trades": 25,
+    "min_win_rate_pct": 60.0,
+    "require_positive_pnl": true
+  },
+  "evidence_carry_forward": {
+    "closed_trades": 33,
+    "wins": 13,
+    "losses_or_breakeven": 20,
+    "net_pnl": 40.0,
+    "source_engine_version": "7.5.2-trend-confluence",
+    "source_strategy_id": "v7502-trend-confluence",
+    "source_release_manifest_sha256": "2b88c6345479306b33ceeffe8877d75518cd8285f8db21c4aae8625947eceae7",
+    "source_config_sha256": "df775ecb327b5cfba91b59fcabbd7f90792e47ebab74ca334b9b11d28d0d7c64",
+    "policy": "Historical context only. Exact current-release evidence restarts at zero for V7.5.4. The 33 closed V7.5.2 paper trades (13W/20L, +$40) remain context and are never counted as V7.5.4 evidence. V7.5.3 closed zero trades before supersession (deployed 2026-10-12 ~10:30 PT, superseded same morning), so no trades are orphaned by this release. Live mirroring stays fenced pending fresh exact-release evidence and explicit re-authorization."
+  },
+  "changes": [
+    {
+      "change_order": 1,
+      "change_type": "operational_freshness",
+      "summary": "Tighten entry option-quote staleness from 60s to 15s.",
+      "details": "MAX_ENTRY_QUOTE_AGE_SECONDS 60 -> 15. The option ask that prices an entry can no longer be up to a minute old; 15s aligns executed entry pricing with near-live quotes while leaving ample headroom over the ~0.2-0.3s warm MCP call latency. Fail-closed: a stale snapshot is rejected and retried on the next 1s scan tick. The underlying equity confirm remains at 5s.",
+      "files": ["v7_scalp_paper.py", "validation/v73_regression_suite.py"],
+      "verification": ["python3 validation/v73_regression_suite.py QuoteFreshnessTests -v"]
+    },
+    {
+      "change_order": 2,
+      "change_type": "operational_freshness",
+      "summary": "Tighten exit option-quote staleness from 30s to 15s.",
+      "details": "MAX_EXIT_QUOTE_AGE_SECONDS 30 -> 15. Exit bids are validated against the same near-live window as entries. Transient venue-timestamp stalls degrade to a 1s-later retry (HOLD), never a forced bad print. The quote-failure catastrophic fallback path is unchanged.",
+      "files": ["v7_scalp_paper.py", "validation/v73_regression_suite.py"],
+      "verification": ["python3 validation/v73_regression_suite.py QuoteFreshnessTests -v"]
+    },
+    {
+      "change_order": 3,
+      "change_type": "signal_freshness",
+      "summary": "Restrict entry signals to the freshest completed 5-minute bar.",
+      "details": "MAX_COMPLETED_BAR_AGE_SECONDS 600 -> 300. Because bars complete every 5 minutes, the old 600s window also admitted the previous (5-10 minute old) bar when the feed lagged; 300s admits only the most recent completed bar and blocks entries whenever the bar feed runs more than 5 minutes behind. Fail-closed on stale data. The 5-minute bar cadence itself is a strategy invariant and is unchanged.",
+      "files": ["v7_scalp_paper.py", "validation/v73_regression_suite.py"],
+      "verification": ["python3 validation/v73_regression_suite.py QuoteFreshnessTests.test_fresh_completed_bar_passes_and_older_bar_is_rejected -v"]
+    },
+    {
+      "change_order": 4,
+      "change_type": "operational_latency",
+      "summary": "Keep the quote worker warm through short idle gaps.",
+      "details": "WORKER_COLD_RESET_IDLE_GRACE_SECONDS = 120.0 in the daemon: the quote worker is no longer cold-reset the instant all symbols go idle; it is released only after 120s of sustained idle. Post-exit cooldowns (60s) and other short gaps no longer pay the ~2s worker cold start on the first re-entry scan. The any_position_open guard (329-minute-hold-bug protection) is untouched: the worker is never reset while any symbol or the spread module holds a position.",
+      "files": ["v7_scalp_live_daemon.py", "validation/v73_regression_suite.py"],
+      "verification": ["python3 validation/v73_regression_suite.py QuoteFreshnessTests.test_quote_worker_cold_reset_has_idle_grace -v"]
+    },
+    {
+      "change_order": 5,
+      "change_type": "signal_rules",
+      "summary": "Require directional momentum on the normal signal path.",
+      "details": "New apply_normal_path_momentum_gate(): a normal-path setup whose taken-direction momentum check is false is rejected with momentum_not_confirmed. Confluence entries already require momentum (V7.5.3 required_checks); crash/pump detector setups are marked detector='crash_detector'/'pump_detector' and remain exempt by design; directionless setups pass through. Winner-review basis: every momentum-failed cohort in the paper data lost money (confluence momentum-failed 3W/7L -$51; normal-path momentum-failed 0W/2L -$25). The normal-path effect is a consistency extension of the operator-approved momentum principle, not a statistical fix (n=2).",
+      "files": ["v7_scalp_paper.py", "validation/v73_regression_suite.py"],
+      "verification": ["python3 validation/v73_regression_suite.py NormalPathMomentumGateTests -v", "python3 validation/v73_regression_suite.py EntryTransactionTests -v"]
+    },
+    {
+      "change_order": 6,
+      "change_type": "functional_gate_wiring",
+      "summary": "Close the live-trigger and post-quote bypasses of the existing normal-path momentum gate.",
+      "details": "A normal-path setup rejected for momentum_not_confirmed could still be revived by live-quote timing confirmation, which cleared its rejection reasons. Post-quote signal recomputation also omitted the existing momentum check. Both paths now fail closed when completed-bar directional momentum is absent. This enforces change_order 5 without changing its score, thresholds, detector exemptions, or exit rules. There were zero closed exact-release 7.5.4 trades before this amendment; earlier 7.5.2 ledger entries remain historical context only.",
+      "files": ["v7_scalp_paper.py", "validation/v73_regression_suite.py"],
+      "verification": ["python3 validation/v73_regression_suite.py EntryTransactionTests NormalPathMomentumGateTests TrendConfluenceTests ReentryPolicyTests -v", "python3 tests/signal_quality_regression.py -q"]
+    },
+    {
+      "change_order": 7,
+      "change_type": "functional_safety_integrity",
+      "summary": "Fail closed on malformed option data, stale risk state, and hard-gate or safety-net bypasses.",
+      "details": "Require a nonempty exact broker instrument ID before paper entry and finite option open interest/volume at the existing liquidity thresholds. Reject negative daily gross loss; compute portfolio gross loss from ledger-reconciled per-symbol state and surface corrupt or missing nonzero-ledger data. Preserve existing non-momentum hard-gate rejections across live-trigger and post-quote confirmation. Record safety-net state failures and retain non-clean daemon health through a healthy later symbol. These are functional enforcement of existing controls; score, thresholds, detector exemptions, entry/exit policies, and live authorization are unchanged. There were zero closed exact V7.5.4 trades before this amendment; historical ledgers retain their original identities.",
+      "files": ["v7_scalp_paper.py", "v7_scalp_live_daemon.py", "validation/v73_regression_suite.py"],
+      "verification": ["python3 validation/v73_regression_suite.py QuoteValidationTests EntryTransactionTests RiskControlTests StateDurabilityTests AdaptiveDaemonTests.test_safety_net_state_corruption_is_observable_and_keeps_health_unhealthy -q", "python3 tests/signal_quality_regression.py -q", "python3 validation/v7423_live_identity_regression.py -q", "python3 v7_release_sync.py static-check"]
+    },
+    {
+      "change_order": 8,
+      "change_type": "functional_safety_integrity",
+      "summary": "Retry stale exit quotes through a fresh worker and report a safe HOLD instead of a monitor ERROR.",
+      "details": "When the provider event timestamp is older than MAX_EXIT_QUOTE_AGE_SECONDS, the monitor performs one cooldown-limited fresh-worker retry. If the provider still returns a stale timestamp, it never treats the bid as executable, never advances peak or soft-exit state, records MONITOR_STALE_QUOTE diagnostics, and returns HOLD. Existing time-stop, hard-close, and catastrophic fallback behavior remains unchanged.",
+      "files": ["v7_scalp_paper.py", "v7_scalp_live_daemon.py", "validation/v73_regression_suite.py"],
+      "verification": ["python3 validation/v73_regression_suite.py StaleVenueGuardTests QuoteValidationTests QuoteWorkerRetryTests -v", "python3 -m py_compile v7_scalp_paper.py v7_scalp_live_daemon.py", "python3 v7_release_sync.py static-check"]
+    },
+    {
+      "change_order": 9,
+      "change_type": "functional_safety_integrity",
+      "summary": "Record successful live reconciliation timestamps and enforce periodic reconciliation.",
+      "details": "The live execution sidecar now records lastReconciliationAt only after a healthy bound-account position reconciliation and reruns reconciliation on startup, reauthorization, recovery, and a 30-second cadence while authorized. A failed check preserves the last successful timestamp, sets reconciliationHealthy false, and keeps the entry path fenced. Strategy thresholds, paper-mode flags, and broker order behavior are unchanged.",
+      "files": ["v7_live_execution_daemon.py", "validation/v7_live_execution_daemon_regression.py", "validation/v7_live_execution_defects_regression.py"],
+      "verification": ["TMP=$(mktemp -d /path/to/project/.hermes/cache/scratch/v7-live-daemon-regression.XXXXXX); HOME=$TMP python3 validation/v7_live_execution_daemon_regression.py -v; rm -rf $TMP", "python3 validation/v7_live_execution_defects_regression.py -v", "python3 -m py_compile v7_live_execution_daemon.py", "python3 v7_release_sync.py static-check"]
+    }
+  ],
+  "signal_rules_changed": true,
+  "live_orders_enabled": false,
+  "notes": "V7.5.4 is paper-only. Operator (Project Contributor) directed 2026-10-12: analyze all winning trades, encode their commonality into entry/exit gates, and push scanning toward live pricing ahead of going live. Winner analysis: all 121 closed paper trades across SPY/QQQ/IWM/XSP (49 wins, +$134 net, P&L recomputed from real quotes; dataset and scripts under reports/winner-analysis-20261012/). Robust winning discriminators: directional momentum confirmed (confluence momentum-True 58.3% WR +$85 vs momentum-False 30% -$51; required since 7.5.3), structural breakout confirmation (modern turtle-confirmed 46.9% WR +$276 vs 30% -$61; required by the V7.5.2 structural gate), and fast profitable exits (winners median 5.0-min holds via 15% targets and 6.0/3.5 trailing; exit machinery performing as designed). Rejected as overfit with evidence: raising the normal score floor 7->8 (modern score-7 cohort P&L-neutral at -$4 over 23 trades; -38% trade frequency for +$4), raising the relative-volume floor 0.75->1.0 (only 2 modern trades affected), blocking bullish RSI 60-72 (era-inconsistent: pooled z~2.8 but modern z=-1.17; 6 of 10 modern bullish winners sat in that zone), debit >= $1.3 preference (era-confounded), afternoon-entry cutoff (modern afternoon cohort net positive), and exit-parameter tuning (win/loss structure is entry-driven: 47 never-worked trades -$442; 'profit given back' proved a stale-peak data artifact). Do not revisit these rejected candidates without new out-of-sample evidence. Live order path audited: v7_live_order_bridge.py places limit orders at the paper-recorded entry ask, so live fills are at-or-better than the recorded price by limit-order semantics; no bridge change required. Known pre-existing suite drift (present before this release, unchanged by it): 22 XSP-class tests error with unknown_symbol:XSP (XSP is not registered in this SPY/QQQ-only engine) and 4 IWM ledger-coverage tests fail on a pre-carry-forward fixture expectation. All other 168 tests pass. Signal logic is frozen from this release forward until a real V7.5.4 cohort exists. The auto-activation scheduler remains paused."
+}

@@ -1,0 +1,51 @@
+{
+  "family_name": "v7-spy-credit-spreads",
+  "strategy_version": "7.4.23-spy-credit-neutral-paper",
+  "strategy_id": "v7423-spy-credit-neutral-paper",
+  "base_engine_version": "7.4.23-evidence-gate-early-reversal",
+  "symbol": "SPY",
+  "mode": "paper_only",
+  "live_orders_enabled": false,
+  "structures": ["iron_condor", "iron_butterfly"],
+  "default_dte": 1,
+  "same_day_dte_supported": true,
+  "promotion_gate": {
+    "min_closed_paper_trades": 10,
+    "require_positive_cumulative_pnl": true,
+    "win_rate_is_diagnostic": true,
+    "exact_quote_backed_entry_exit_pairs_only": true
+  },
+  "risk": {
+    "max_risk_per_trade": 40.0,
+    "max_daily_gross_loss": 50.0,
+    "max_open_positions": 1,
+    "no_naked_legs": true,
+    "max_position_width_is_risk_capped": true
+  },
+  "entry": {
+    "entry_start_et": "09:30",
+    "entry_end_et": "16:00",
+    "range_gate_required": true,
+    "four_leg_executable_quotes_required": true,
+    "max_quote_age_seconds": 15.0,
+    "max_leg_timestamp_spread_seconds": 3.0,
+    "structure_preference": "iron_condor_then_iron_butterfly",
+    "no_forced_daily_trade": true
+  },
+  "exits": {
+    "iron_condor_profit_capture_fraction": 0.50,
+    "iron_butterfly_profit_capture_fraction": 0.35,
+    "stop_loss_fraction_of_max_risk": 0.50,
+    "exit_on_v7423_range_regime_break": true,
+    "exit_on_underlying_short_strike_breach": true,
+    "hard_close_et": "16:00",
+    "no_overnight_positions": true
+  },
+  "quote_methods": [
+    "get_equity_quotes",
+    "get_option_chains",
+    "get_option_instruments",
+    "get_option_quotes"
+  ],
+  "notes": "Separate paper evidence and ledger. This manifest preserves historical V7.4.20 through V7.4.22 single-leg and spread trade records, P&L, release identities, authorization, and paper-only settings."
+}

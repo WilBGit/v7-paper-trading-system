@@ -1,0 +1,6 @@
+{
+  "min_closed_trades": 5,
+  "min_win_rate_pct": 0.0,
+  "require_positive_pnl": true,
+  "policy": "exact current-release sample plus positive cumulative P&L; win rate is diagnostic"
+}
