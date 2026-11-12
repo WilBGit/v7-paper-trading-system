@@ -1,5 +1,7 @@
 # V7 Paper Trading and Operations
 
+[![CI](https://github.com/WilBGit/v7-paper-trading-system/actions/workflows/ci.yml/badge.svg)](https://github.com/WilBGit/v7-paper-trading-system/actions/workflows/ci.yml)
+
 V7 is a research and paper-trading operations system for structured signal evaluation, release controls, health checks, and evidence-gated promotion. This repository is a sanitized source publication for review, reproducibility, and controlled maintenance.
 
 ## What is included
